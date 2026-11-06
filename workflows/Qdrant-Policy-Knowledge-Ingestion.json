@@ -1,0 +1,238 @@
+{
+  "name": "Qdrant Policy Knowledge Ingestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        -416
+      ],
+      "id": "c08678e2-b6a7-49b8-af95-b89188c438c4",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/knowledge/customer_support_policies.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -400,
+        -416
+      ],
+      "id": "07e60dde-f2f4-44d1-b045-01c807ff61c7",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "=data",
+        "destinationKey": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -176,
+        -416
+      ],
+      "id": "25271bcb-2270-4a94-af0c-872b4d9014e2",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "output_items = []\n\nfor incoming_object in _items:\n    full_policy_text = incoming_object.get(\"json\", {}).get(\"text\", \"\")\n    \n    # FIX: Standardize Windows carriage returns (\\r\\n) into simple Linux newlines (\\n)\n    clean_text = full_policy_text.replace(\"\\r\\n\", \"\\n\")\n    \n    # Split text on double line breaks (paragraphs)\n    policy_sections = clean_text.split(\"\\n\\n\")\n    \n    for index, section in enumerate(policy_sections):\n        section_text = section.strip()\n        \n        # Skip completely empty text chunks\n        if not section_text:\n            continue\n            \n        # Append explicitly using the strict n8n list-of-dicts schema\n        output_items.append({\n            \"json\": {\n                \"chunk_id\": index + 1,\n                \"chunk_text\": section_text\n            }\n        })\n\nreturn output_items\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -416
+      ],
+      "id": "8783aa57-33a8-4ecc-8c43-6303aec57599",
+      "name": "Code in Python"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "nomic-embed-text"
+            },
+            {
+              "name": "input",
+              "value": "={{ $json.chunk_text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        272,
+        -336
+      ],
+      "id": "6eb01da5-1c5e-439c-af6e-37853298c4a4",
+      "name": "Create Ollama Embedding - HTTP Request"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "output_points = []\n\n# Loop through all the rows inside n8n's native input array\nfor item in _items:\n    # Your exact logic, wrapped safely inside the loop structure\n    chunk_id = item[\"json\"][\"chunk_id\"]\n    chunk_text = item[\"json\"][\"chunk_text\"]\n    \n    # Extracts the flat vector list from Ollama's nested response array\n    embedding_vector = item[\"json\"][\"embeddings\"][0]\n    \n    # Append the exact dictionary format Qdrant needs to our collection list\n    output_points.append({\n        \"json\": {\n            \"id\": chunk_id,\n            \"vector\": embedding_vector,\n            \"payload\": {\n                \"chunk_id\": chunk_id,\n                \"text\": chunk_text\n            }\n        }\n    })\n\n# Return the entire completed batch of points to the next node\nreturn output_points\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -416
+      ],
+      "id": "55dfc336-2c9a-48ac-80cc-126f56ec49ec",
+      "name": "Code in Python1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        496,
+        -416
+      ],
+      "id": "82bde7c7-500b-4964-bdf5-dbc322b4b28a",
+      "name": "Merge Chunk With Embedding"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/my_policy_knowledge/points",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "points",
+              "value": "={{ [ { id: $json.id, vector: $json.vector, payload: $json.payload } ] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        944,
+        -416
+      ],
+      "id": "27e06699-7153-4781-83c5-96e61fe75a54",
+      "name": "Insert Into Qdrant HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in Python",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python": {
+      "main": [
+        [
+          {
+            "node": "Create Ollama Embedding - HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Chunk With Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Ollama Embedding - HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge Chunk With Embedding",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Chunk With Embedding": {
+      "main": [
+        [
+          {
+            "node": "Code in Python1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in Python1": {
+      "main": [
+        [
+          {
+            "node": "Insert Into Qdrant HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3b5f5836-edc5-411b-9e2c-e4cb76719ad3",
+  "meta": {
+    "instanceId": "47b83044a0358affbb4001b7f93f9914c279365df9eef4e4c3875a99b3e54d21"
+  },
+  "nodeGroups": [],
+  "id": "sgJoGOT7XGcmx5Vx",
+  "tags": []
+}

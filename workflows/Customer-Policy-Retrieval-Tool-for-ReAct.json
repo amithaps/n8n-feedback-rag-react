@@ -1,0 +1,145 @@
+{
+  "name": "Policy Retrieval Tool Workflow for ReAct",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"feedback\": \"The box arrived torn.\",\n  \"issue\": \"damaged item\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -528,
+        -16
+      ],
+      "id": "1c6277bd-bb36-4818-8d61-e8d513c50c7d",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "nomic-embed-text"
+            },
+            {
+              "name": "input",
+              "value": "={{ $json.feedback }} {{ $json.issue }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -304,
+        -16
+      ],
+      "id": "8b993b68-28c3-4f01-9e16-5101e68fabf7",
+      "name": "Create Feedback Embedding HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/my_policy_knowledge/points/search",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vector",
+              "value": "={{$json.embeddings[0]}}"
+            },
+            {
+              "name": "limit",
+              "value": "={{2}}"
+            },
+            {
+              "name": "with_payload",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -80,
+        -16
+      ],
+      "id": "e619f988-8a69-445a-ab6b-61ef64443b59",
+      "name": "Search Qdrant Policy HTTP Request"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "output_items = []\n\nfor incoming_object in _items:\n    qdrant_results = incoming_object.get(\"json\", {}).get(\"result\", [])\n\n    retrieved_policies = []\n\n    for result in qdrant_results:\n        payload = result.get(\"payload\", {})\n\n        policy_id = payload.get(\"chunk_id\")\n        policy_text = payload.get(\"text\", \"\")\n        retrieval_score = result.get(\"score\")\n\n        retrieved_policies.append({\n            \"matched_policy_id\": policy_id,\n            \"retrieval_score\": retrieval_score,\n            \"retrieved_policy\": policy_text\n        })\n\n    output_items.append({\n        \"json\": {\n            \"retrieved_policies\": retrieved_policies\n        }\n    })\n\nreturn output_items"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -16
+      ],
+      "id": "c1bf0ab4-6bec-4dc3-b4a0-89fcd380290e",
+      "name": "Extract Retrieved Policies"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Create Feedback Embedding HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Search Qdrant Policy HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Qdrant Policy HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Retrieved Policies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Create Feedback Embedding HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "America/Edmonton",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "fa93c677-ebd5-42a6-b613-0c7fe994fcb0",
+  "meta": {
+    "instanceId": "47b83044a0358affbb4001b7f93f9914c279365df9eef4e4c3875a99b3e54d21"
+  },
+  "nodeGroups": [],
+  "id": "JLxUuJRrP6KC1cmR",
+  "tags": []
+}

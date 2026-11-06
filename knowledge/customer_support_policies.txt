@@ -1,0 +1,14 @@
+Shipping Delay Policy
+If delivery is late, apologize to the customer and tell them the support team will check the delivery status.
+
+Damaged Item Policy
+If an item or package is damaged, apologize and ask the customer to share a photo so replacement can be reviewed.
+
+Refund Policy
+If the customer asks for a refund, acknowledge the request and tell them refund eligibility will be reviewed.
+
+Return Policy
+Items can be returned within 30 days if unused and in original condition.
+
+Escalation Rule
+If the customer mentions legal, safety, injury, fraud, or repeated unresolved issue, escalate to the support team.

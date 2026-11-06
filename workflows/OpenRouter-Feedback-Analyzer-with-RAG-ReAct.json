@@ -1,0 +1,314 @@
+{
+  "name": "OpenRouter_Feedback_Analyzer_RAG_ReAct",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openrouter/free",
+        "options": {
+          "temperature": 0,
+          "topP": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        656
+      ],
+      "id": "1631de9d-8859-40cb-b995-c9330ae5da6a",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "gYZE4p1pHibKkuIr",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"sentiment\": {\n      \"type\": \"string\",\n      \"enum\": [\"positive\", \"neutral\", \"negative\", \"mixed\"]\n    },\n    \"issue\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\"sentiment\", \"issue\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -1936,
+        656
+      ],
+      "id": "d4bb67f9-0fcd-4153-ad9b-c769895ae64a",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this customer feedback:\n\n{{ $json.body.feedback }}\n\nReturn ONLY valid JSON in this exact format:\n{\n  \"sentiment\": \"positive | neutral | negative | mixed\",\n  \"issue\": \"short description of the issue or none\"\n}\n\nRules:\n- sentiment must be exactly one of: positive, neutral, negative, mixed\n- neutral = factual / no emotion\n- negative = only negative feedback\n- positive = only positive feedback\n- mixed = both positive and negative feedback\n- if positive or neutral, issue must be \"none\"\n- do not explain\n- do not use markdown",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -2016,
+        432
+      ],
+      "id": "56966553-c447-4f54-98a3-1366a08164e7",
+      "name": "Analyzer AI Agent",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "e9bd3e36-d35b-4879-adb6-fe59c5322bf8",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2240,
+        432
+      ],
+      "id": "2d4e677e-2820-4cad-b3bc-7414fa9d11e2",
+      "name": "Webhook",
+      "webhookId": "e9bd3e36-d35b-4879-adb6-fe59c5322bf8"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Feedback: {{ $('Webhook').item.json.body.feedback }}\nSentiment: {{ $json.output.sentiment }}\nIssue: {{ $json.output.issue }}\n\nThought:",
+        "options": {
+          "systemMessage": "Answer the customer feedback response task as best you can.\n\nYou have access to the following tool:\n\nPolicy_Retrieval_Tool:\nUseful when customer feedback and/or issue requires company policy knowledge or service action.\nUse this tool for issues related to the following company policies: Shipping Delay, Damaged Item, Refund, Return and Escalation.\nInput should be the customer's feedback and/or the detected issue.\n\nUse the following format:\n\nFeedback: the original customer feedback\nSentiment: the sentiment detected by the analyzer\nIssue: the issue detected by the analyzer\n\nThought: think about whether this feedback requires policy knowledge or service action\nAction: the action to take, should be one of [Policy_Retrieval_Tool]\nAction Input: the feedback or issue to send to the tool\nObservation: the result of the action\n\n... this Thought/Action/Action Input/Observation can repeat if needed\n\nThought: I now know the final customer response\nFinal Answer: the final customer-facing response\n\nRules:\n- Use this tool only for feedbacks and/or issues related to company policies such as Shipping Delay, Damaged Item, Refund, Return and Escalation where service action is needed. \n- Do not use the tool for feedbacks and/or issues that are not related to company policies. Some examples are compliments, neutral feedback, general suggestions, feature requests, vague opinions, design preferences, or product preference feedback such as wanting more colors.\n- If no tool is needed, skip Action and go directly to Final Answer.\n- Never invent company policy.\n- If the tool result is not relevant, do not claim a specific policy.\n- When using Policy_Retrieval_Tool, base the final response only on the retrieved policy context. Do not promise any action that is not supported by the retrieved policy.\n- Final Answer must be professional, concise, and one sentence only.\n- Final Answer must not mention internal reasoning, tools, retrieval, RAG, Qdrant, or policy lookup.\n- When multiple retrieved policies apply, prioritize only ONE policy that best matches the customer's explicit service request action in the feedback, while briefly acknowledging the underlying issue.",
+          "returnIntermediateSteps": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1664,
+        432
+      ],
+      "id": "d89bf345-5d63-445e-b775-69f15d8562b2",
+      "name": "ReAct Response Agent"
+    },
+    {
+      "parameters": {
+        "description": "Retrieves relevant company policy context for customer feedback and/or detected issues. Use when the feedback or issue is related to company policies such as Shipping Delay, Damaged Item, Refund, Return, and Escalation. Input should be the customer feedback or detected issue.",
+        "workflowId": {
+          "__rl": true,
+          "value": "JLxUuJRrP6KC1cmR",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/JLxUuJRrP6KC1cmR",
+          "cachedResultName": "Policy Retrieval Tool Workflow for ReAct"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "feedback": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('feedback', ``, 'string') }}",
+            "issue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('issue', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "feedback",
+              "displayName": "feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "issue",
+              "displayName": "issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -1488,
+        656
+      ],
+      "id": "b17ec83b-4496-49de-97e0-32fc03d94bfc",
+      "name": "Policy_Retrieval_Tool"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6ea91548-14dd-49e3-8c25-3b25bb3eff8b",
+              "name": "feedback",
+              "value": "={{ $('Webhook').item.json.body.feedback }}",
+              "type": "string"
+            },
+            {
+              "id": "7700ba4f-834c-4397-899a-c347cad800e3",
+              "name": "sentiment",
+              "value": "={{ $('Analyzer AI Agent').item.json.output.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "a799dd7a-ed51-4b8d-87a1-cf8f8a7eda57",
+              "name": "issue",
+              "value": "={{ $('Analyzer AI Agent').item.json.output.issue }}",
+              "type": "string"
+            },
+            {
+              "id": "6da50bcd-186b-4082-a83c-986b62bc9a35",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1312,
+        432
+      ],
+      "id": "114f865d-01a3-474f-8e8d-16c7da3fd8d0",
+      "name": "Final Response - ReAct"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "ReAct Response Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyzer AI Agent": {
+      "main": [
+        [
+          {
+            "node": "ReAct Response Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy_Retrieval_Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "ReAct Response Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReAct Response Agent": {
+      "main": [
+        [
+          {
+            "node": "Final Response - ReAct",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "America/Edmonton",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ea88217b-586e-4b62-947b-2e9e33a1e340",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "47b83044a0358affbb4001b7f93f9914c279365df9eef4e4c3875a99b3e54d21"
+  },
+  "nodeGroups": [],
+  "id": "yj45GKtgGKYFTSxd",
+  "tags": [
+    {
+      "updatedAt": "2026-06-11T22:31:34.146Z",
+      "createdAt": "2026-06-11T22:31:34.146Z",
+      "id": "Av1H88BzEsiRFrWW",
+      "name": "Vector_db"
+    },
+    {
+      "updatedAt": "2026-06-11T22:31:45.703Z",
+      "createdAt": "2026-06-11T22:31:45.703Z",
+      "id": "BjbD2uZEOIqpKNuW",
+      "name": "embedding"
+    },
+    {
+      "updatedAt": "2026-06-11T22:31:07.659Z",
+      "createdAt": "2026-06-11T22:31:07.659Z",
+      "id": "n9QLv4KTosYNdtVo",
+      "name": "ReAct"
+    },
+    {
+      "updatedAt": "2026-06-11T22:31:13.555Z",
+      "createdAt": "2026-06-11T22:31:13.555Z",
+      "id": "rD2txqWT77A1zTIi",
+      "name": "Qdrant"
+    },
+    {
+      "updatedAt": "2026-06-11T22:31:39.169Z",
+      "createdAt": "2026-06-11T22:31:39.169Z",
+      "id": "uQaFoBT7suhEG5Rz",
+      "name": "Ollama"
+    },
+    {
+      "updatedAt": "2026-06-11T22:31:02.782Z",
+      "createdAt": "2026-06-11T22:31:02.782Z",
+      "id": "uYabnr96rwyCgms6",
+      "name": "RAG"
+    }
+  ]
+}

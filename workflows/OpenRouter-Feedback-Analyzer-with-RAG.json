@@ -1,0 +1,566 @@
+{
+  "name": "OpenRouter Feedback Analyzer with RAG",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "openrouter/free",
+        "options": {
+          "temperature": 0,
+          "topP": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        720
+      ],
+      "id": "262096e4-3f1a-4ae7-8d92-8ea73a5265a0",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "gYZE4p1pHibKkuIr",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"sentiment\": {\n      \"type\": \"string\",\n      \"enum\": [\"positive\", \"neutral\", \"negative\", \"mixed\"]\n    },\n    \"issue\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\"sentiment\", \"issue\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -1936,
+        976
+      ],
+      "id": "dfc142d1-5b33-453a-a11c-8fcebc572b5b",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ca4eb693-6851-4ecc-883b-7c11303e8017",
+              "leftValue": "={{ $json.output.sentiment }}",
+              "rightValue": "neutral",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "64a66618-e8bd-4303-9ff1-4b0cb278841a",
+              "leftValue": "={{ $json.output.sentiment }}",
+              "rightValue": "positive",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1664,
+        752
+      ],
+      "id": "cc3226ea-95d7-400b-85b0-732b88e548a6",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this customer feedback:\n\n{{ $json.body.feedback }}\n\nReturn ONLY valid JSON in this exact format:\n{\n  \"sentiment\": \"positive | neutral | negative | mixed\",\n  \"issue\": \"short description of the issue or none\"\n}\n\nRules:\n- sentiment must be exactly one of: positive, neutral, negative, mixed\n- neutral = factual / no emotion\n- negative = only negative feedback\n- positive = only positive feedback\n- mixed = both positive and negative feedback\n- if positive or neutral, issue must be \"none\"\n- do not explain\n- do not use markdown",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -2016,
+        752
+      ],
+      "id": "689a554e-d43d-4ff5-9234-4bb125acbee4",
+      "name": "Analyzer AI Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer feedback: {{ $('Webhook').item.json.body.feedback }}\n\nSentiment: {{ $('If').item.json.output.sentiment }}\nIssue: {{ $('If').item.json.output.issue }}\nPolicy: {{ $json.retrieved_policy }}\n\nAs an experienced customer support representative write a short response to the customer.\n\nRules:\n- only one sentence.\n- no greeting\n- no signature\n- acknowledge the issue\n- sound empathetic and professional\n- do not mention anything unrelated to the issue\n- do not invent policy details\n- Use the retrieved policy as a guidance to construct the response. Do not mention \"policy\" or \"knowledge base\" to the customer.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -784,
+        896
+      ],
+      "id": "10206a4f-5d95-4c4a-8d30-e61ef1261dd6",
+      "name": "Complaint Responder AI Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer feedback: {{ $('Webhook').item.json.body.feedback }}\n\nAnalyzer result:\nSentiment: {{ $json.output.sentiment }}\nIssue: {{ $json.output.issue }}\n\nAs an experienced customer support representative write a short response to the customer.\n\nRules:\n- only one sentence.\n- no greeting\n- no signature\n- if sentiment is neutral, acknowledge factually\n- if sentiment is positive, respond appreciatively",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -768,
+        496
+      ],
+      "id": "314e2ea2-bddf-4351-bc37-cde1127edc49",
+      "name": "Positive/Neutral Responder AI Agent"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "feedback-analyzer",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2240,
+        752
+      ],
+      "id": "22d58d45-23f3-489c-832f-6e7fa0e07ffe",
+      "name": "Webhook",
+      "webhookId": "523875c6-2ccd-43ba-a1c4-711e514db572"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0e2cb269-7daa-466e-8694-88ccb0f6bfbd",
+              "name": "feedback",
+              "value": "={{ $('Webhook').item.json.body.feedback }}",
+              "type": "string"
+            },
+            {
+              "id": "ccd5b95c-5076-4c5f-b233-e176488bc1c2",
+              "name": "sentiment",
+              "value": "={{ $('If').item.json.output.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "bad34c5b-38d8-4526-a94c-b061c5193b56",
+              "name": "issue",
+              "value": "={{ $('If').item.json.output.issue }}",
+              "type": "string"
+            },
+            {
+              "id": "73cab681-3f0e-4bdd-8bbb-fe576b079786",
+              "name": "response",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "da2c42fa-21dd-4835-9d2c-0315367e664a",
+              "name": "retrieved_policy",
+              "value": "={{ $if($(\"Extract Retrieved Policy\").isExecuted, $(\"Extract Retrieved Policy\").item.json.retrieved_policy, \"not_applicable\") }}",
+              "type": "string"
+            },
+            {
+              "id": "5c53d415-746c-4f78-8849-a48c676d3a77",
+              "name": "retrieval_score",
+              "value": "={{ $if($(\"Extract Retrieved Policy\").isExecuted, $(\"Extract Retrieved Policy\").item.json.retrieval_score, null) }}",
+              "type": "string"
+            },
+            {
+              "id": "163a615b-392f-4f71-998b-f65d21ad12d3",
+              "name": "policy_id",
+              "value": "={{ $if($(\"Extract Retrieved Policy\").isExecuted, $(\"Extract Retrieved Policy\").item.json.matched_policy_id, null) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        752
+      ],
+      "id": "1d6a5776-a726-4a87-bb58-cecbf5351424",
+      "name": "Final Response"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "lUvHuun0Zv2Zdg2c",
+          "mode": "list",
+          "cachedResultName": "feedback_logs",
+          "cachedResultUrl": "/projects/cDoLKGELB26pVWmW/datatables/lUvHuun0Zv2Zdg2c"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "response": "={{ $json.response }}",
+            "feedback": "={{ $json.feedback }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "issue": "={{ $json.issue }}",
+            "retrieved_policy": "={{ $json.retrieved_policy }}",
+            "policy_id": "={{ $json.policy_id }}",
+            "retrieval_score": "={{ $json.retrieval_score }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "feedback",
+              "displayName": "feedback",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "issue",
+              "displayName": "issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "response",
+              "displayName": "response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "retrieved_policy",
+              "displayName": "retrieved_policy",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "policy_id",
+              "displayName": "policy_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "retrieval_score",
+              "displayName": "retrieval_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -192,
+        752
+      ],
+      "id": "5448d767-943f-4a1d-abdb-dc1ed3ec0b10",
+      "name": "Insert row2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "nomic-embed-text"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('Webhook').item.json.body.feedback }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1440,
+        896
+      ],
+      "id": "9ffbde43-add1-4b46-8cc6-865398ace0af",
+      "name": "Create Feedback Embedding HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/my_policy_knowledge/points/search",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "vector",
+              "value": "={{$json.embeddings[0]}}"
+            },
+            {
+              "name": "limit",
+              "value": "={{1}}"
+            },
+            {
+              "name": "with_payload",
+              "value": "={{true}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1216,
+        896
+      ],
+      "id": "561d65e5-0038-482b-9adb-26cb774b4b98",
+      "name": "Search Qdrant Policy HTTP Request"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "96c02031-5b51-450b-a8a0-98b0973a4e38",
+              "name": "retrieved_policy",
+              "value": "={{ $json.result[0].payload.text }}",
+              "type": "string"
+            },
+            {
+              "id": "a8ecc53d-56bf-4f3f-b4eb-a5d6f6db74e0",
+              "name": "retrieval_score",
+              "value": "={{ $json.result[0].score }}",
+              "type": "number"
+            },
+            {
+              "id": "8436cc1d-c7f3-4a54-986c-4f596f3759f1",
+              "name": "matched_policy_id",
+              "value": "={{ $json.result[0].id }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -992,
+        896
+      ],
+      "id": "16efaeb3-2854-4d9b-885b-ef8da2237668",
+      "name": "Extract Retrieved Policy"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Complaint Responder AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Positive/Neutral Responder AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Positive/Neutral Responder AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Feedback Embedding HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyzer AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyzer AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complaint Responder AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Positive/Neutral Responder AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Response": {
+      "main": [
+        [
+          {
+            "node": "Insert row2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Feedback Embedding HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Search Qdrant Policy HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Qdrant Policy HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Retrieved Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Retrieved Policy": {
+      "main": [
+        [
+          {
+            "node": "Complaint Responder AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "America/Edmonton",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "a6fc74dc-d6a3-4a22-8bb9-7dd271ea2f50",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "47b83044a0358affbb4001b7f93f9914c279365df9eef4e4c3875a99b3e54d21"
+  },
+  "nodeGroups": [],
+  "id": "r6FsCGslgBJRGYXt",
+  "tags": []
+}
