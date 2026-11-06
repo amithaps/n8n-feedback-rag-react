@@ -149,14 +149,14 @@ For repeated calls without manually listening, publish the analyzer and use the 
 Workflow canvases and sample results:
 
 1. Policy ingestion.
-![alt text](image.png)
+![Policy ingestion workflow](policy-ingestion.png)
 2. Policy retrieval helper.
-![alt text](image-1.png)
+![Policy retrieval helper workflow](policy-retrieval-helper.png)
 3. RAG analyzer.
-![alt text](image-2.png)
+![RAG feedback analyzer workflow](rag-analyzer.png)
 4. ReAct analyzer.
-![alt text](image-3.png)
+![ReAct feedback analyzer workflow](react-analyzer.png)
 5. Feedback_logs.
-![alt text](image-4.png)
+![Feedback logs table](feedback-logs.png)
 
 
